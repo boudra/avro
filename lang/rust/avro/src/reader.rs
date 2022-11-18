@@ -29,7 +29,7 @@ use serde_json::from_slice;
 use std::{
     collections::HashMap,
     convert::TryFrom,
-    io::{ErrorKind, Read},
+    io::{ErrorKind, Read, Seek},
     marker::PhantomData,
     str::FromStr,
 };
@@ -47,6 +47,19 @@ struct Block<R> {
     codec: Codec,
     writer_schema: Schema,
     user_metadata: HashMap<String, Vec<u8>>,
+}
+
+impl<R: Seek + Read> Block<R> {
+    pub fn reset(&mut self) -> AvroResult<()> {
+        self.codec = Codec::Null;
+        self.writer_schema = Schema::Null;
+        self.buf.clear();
+        self.buf_idx = 0;
+        self.message_count = 0;
+        self.user_metadata = Default::default();
+        self.reader.seek(std::io::SeekFrom::Start(0)).unwrap();
+        self.read_header()
+    }
 }
 
 impl<R: Read> Block<R> {
@@ -265,6 +278,13 @@ pub struct Reader<'a, R> {
     reader_schema: Option<&'a Schema>,
     errored: bool,
     should_resolve_schema: bool,
+}
+
+impl<'a, R: Seek + Read> Reader<'a, R> {
+    pub fn reset(&mut self) -> AvroResult<()> {
+        self.errored = false;
+        self.block.reset()
+    }
 }
 
 impl<'a, R: Read> Reader<'a, R> {
